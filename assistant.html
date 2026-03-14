@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant | Accessible Grade 12 Hub</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Plus+Jakarta+Sans:wght@400;600&display=swap');
+        
+        :root {
+            --neon: #00e5ff;
+            --bg: #050a10;
+            --gold: #ffd700;
+            --card-bg: #1a1a1a;
+        }
+
+        body { 
+            background-color: var(--bg); 
+            color: white; 
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+        }
+
+        /* ACCESSIBILITY: High Visibility Focus for Low Vision */
+        .nav-item:focus {
+            outline: 6px solid var(--gold);
+            outline-offset: 15px;
+            background: rgba(255, 215, 0, 0.15);
+            transform: scale(1.05);
+        }
+
+        .ai-core {
+            width: 250px; 
+            height: 250px; 
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--neon) 0%, transparent 70%);
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer; 
+            border: 4px solid var(--neon);
+            transition: all 0.4s ease;
+            position: relative;
+        }
+
+        .ai-core.listening {
+            background: radial-gradient(circle, var(--gold) 0%, transparent 70%);
+            border-color: var(--gold);
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0px var(--gold); }
+            50% { transform: scale(1.1); box-shadow: 0 0 60px var(--gold); }
+            100% { transform: scale(1); box-shadow: 0 0 0px var(--gold); }
+        }
+
+        .status-msg { 
+            margin-top: 50px; 
+            font-family: 'Orbitron'; 
+            font-size: 1.8rem; 
+            color: var(--neon); 
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .transcript { 
+            margin-top: 20px; 
+            color: rgba(255, 255, 255, 0.5); 
+            font-style: italic; 
+            max-width: 80%; 
+            text-align: center; 
+            font-size: 1.1rem;
+        }
+        
+        .back-btn {
+            position: absolute; 
+            top: 40px; 
+            left: 40px;
+            padding: 15px 30px; 
+            background: #111; 
+            border: 2px solid var(--neon);
+            color: var(--neon); 
+            font-family: 'Orbitron'; 
+            cursor: pointer; 
+            text-decoration: none;
+            border-radius: 8px;
+            transition: 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="back-btn nav-item" aria-label="Return to Service Hub">← BACK</a>
+
+    <div id="core" class="ai-core nav-item" role="button" aria-label="Ask Gemini a question" tabindex="0" onclick="startAssistant()">
+        <div style="font-family: 'Orbitron'; color: black; font-weight: bold; font-size: 1.3rem; text-align: center;">
+            TALK TO<br>GEMINI
+        </div>
+    </div>
+
+    <div class="status-msg" id="status" aria-live="assertive">READY</div>
+    <div class="transcript" id="transcript">"Your speech will appear here"</div>
+
+    <script>
+        const API_KEY = "AIzaSyC8uWO0cog4mcMDqjn4aWgFBA_IcyhFDsM";
+        const status = document.getElementById('status');
+        const transcriptDiv = document.getElementById('transcript');
+        const core = document.getElementById('core');
+        const synth = window.speechSynthesis;
+
+        // --- KEYBOARD NAVIGATION (FOR BLIND STUDENTS) ---
+        const navItems = document.querySelectorAll('.nav-item');
+        let focusIndex = 0;
+
+        window.addEventListener('keydown', (e) => {
+            if (["ArrowDown", "ArrowRight"].includes(e.key)) {
+                e.preventDefault();
+                focusIndex = (focusIndex + 1) % navItems.length;
+                navItems[focusIndex].focus();
+            } else if (["ArrowUp", "ArrowLeft"].includes(e.key)) {
+                e.preventDefault();
+                focusIndex = (focusIndex - 1 + navItems.length) % navItems.length;
+                navItems[focusIndex].focus();
+            } else if (e.key === "Enter" || e.key === " ") {
+                if (document.activeElement === core) {
+                    e.preventDefault();
+                    startAssistant();
+                }
+            }
+        });
+
+        // --- VOICE SYNTHESIS (THE TALKING) ---
+        function speak(text) {
+            synth.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.rate = 1.0;
+            utter.pitch = 1.0;
+            
+            // Clean text so the AI doesn't read symbols out loud
+            const cleanText = text.replace(/[*#_]/g, '')
+                                  .replace(/\(text\)/g, '')
+                                  .replace(/\\/g, '');
+            
+            synth.speak(utter);
+        }
+
+        // --- API BRAIN (THE THINKING) ---
+        async function callGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            
+            const requestBody = {
+                contents: [{
+                    parts: [{
+                        text: `Context: You are a supportive AI assistant for Amanuel, a blind Grade 12 student. 
+                               Help him with school, Mechanical Engineering, and physics. 
+                               Respond concisely for a screen reader.
+                               User Question: ${prompt}`
+                    }]
+                }]
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) throw new Error("Network issue");
+
+                const data = await response.json();
+                return data.candidates[0].content.parts[0].text;
+            } catch (error) {
+                console.error(error);
+                return " I'm having troubles . Please check the network.";
+            }
+        }
+
+        // --- SPEECH RECOGNITION (THE LISTENING) ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            status.innerText = "NOT SUPPORTED";
+            speak("Your browser does not support voice features. Please use Google Chrome.");
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+
+            function startAssistant() {
+                synth.cancel();
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.log("Already active");
+                }
+            }
+
+            recognition.onstart = () => {
+                core.classList.add('listening');
+                status.innerText = "LISTENING...";
+                status.style.color = "var(--gold)";
+                speak("I'm listening.");
+            };
+
+            recognition.onresult = async (event) => {
+                const userText = event.results[0][0].transcript;
+                transcriptDiv.innerText = `"${userText}"`;
+                core.classList.remove('listening');
+                
+                status.innerText = "THINKING...";
+                status.style.color = "white";
+
+                const aiResponse = await callGemini(userText);
+                
+                status.innerText = "SPEAKING";
+                status.style.color = "var(--neon)";
+                speak(aiResponse);
+            };
+
+            recognition.onerror = () => {
+                core.classList.remove('listening');
+                status.innerText = "ERROR";
+                speak("I didn't catch that. Could you say it again?");
+            };
+        }
+
+        // AUTO-WELCOME
+        window.onload = () => {
+            setTimeout(() => {
+                navItems[focusIndex].focus();
+                speak("Assistant ready. Use arrow keys to navigate. Select the center core and press enter to speak.");
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
